@@ -101,7 +101,7 @@ app.prepare().then(() => {
             let partnerId = null
             while (waitingUsers.length > 0) {
                 const candidateId = waitingUsers.shift()
-                
+
                 // Check if partner still exists and is connected
                 if (userSessions.has(candidateId)) {
                     partnerId = candidateId
