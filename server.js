@@ -43,12 +43,18 @@ app.prepare().then(() => {
 
             // Add diagnostic endpoint
             if (parsedUrl.pathname === '/api/status') {
-                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                })
                 res.end(JSON.stringify({
+                    status: 'ok',
                     waitingUsers: waitingUsers.length,
-                    activeConnections: activeConnections.size / 2, // Divide by 2 since each connection is stored twice
+                    activeConnections: activeConnections.size / 2,
+                    totalOnline: waitingUsers.length + (activeConnections.size / 2) * 2,
                     totalSessions: userSessions.size,
-                    waitingUserIds: waitingUsers
+                    uptime: Math.floor(process.uptime()),
+                    timestamp: new Date().toISOString()
                 }))
                 return
             }
@@ -61,13 +67,32 @@ app.prepare().then(() => {
         }
     })
 
-    const io = new Server(server)
+    const io = new Server(server, {
+        path: '/socket.io',
+        cors: {
+            origin: "*",
+            methods: ["GET", "POST"],
+            credentials: true
+        },
+        transports: ['websocket', 'polling'],
+        pingTimeout: 60000,
+        pingInterval: 25000
+    })
 
     io.on('connection', async (socket) => {
         console.log('User connected:', socket.id)
 
         // Get user's IP and country
-        const clientIP = socket.handshake.address || socket.request.connection.remoteAddress
+        // Handle proxy headers (x-forwarded-for) for platforms like Railway/Vercel
+        let clientIP = socket.handshake.headers['x-forwarded-for'] ||
+            socket.handshake.address ||
+            socket.request.connection.remoteAddress
+
+        // If multiple IPs in x-forwarded-for, take the first one
+        if (clientIP && clientIP.includes(',')) {
+            clientIP = clientIP.split(',')[0].trim()
+        }
+
         const country = getCountryFromIP(clientIP)
         const geoInfo = getGeoInfo(clientIP)
 

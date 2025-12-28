@@ -26,7 +26,12 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     const [connectionStatus, setConnectionStatus] = useState<string>('Click "New" to start chatting')
 
     useEffect(() => {
-        const newSocket = io()
+        const newSocket = io({
+            path: '/socket.io',
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+        })
         setSocket(newSocket)
 
         newSocket.on('connect', () => {
@@ -36,6 +41,11 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
             newSocket.emit('find-stranger')
             setIsSearching(true)
             setConnectionStatus('Looking for someone you can chat with...')
+        })
+
+        newSocket.on('connect_error', (err) => {
+            console.error('Connection error:', err)
+            setConnectionStatus('Connection error. Retrying...')
         })
 
         newSocket.on('matched', (data: any) => {
