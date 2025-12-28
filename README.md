@@ -6,7 +6,7 @@ A real-time chat application similar to Omegle, built with Next.js and Socket.IO
 
 - 🎲 Random stranger matching
 - 💬 Real-time messaging
-- � Country tracking with IP geolocation
+- 🌍 Country tracking with IP geolocation
 - 📊 Chat history stored in Supabase
 - 📸 Image sharing with Cloudinary
 - 🎨 Clean, modern UI
