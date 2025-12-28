@@ -40,6 +40,19 @@ app.prepare().then(() => {
     const server = createServer(async (req, res) => {
         try {
             const parsedUrl = parse(req.url, true)
+
+            // Add diagnostic endpoint
+            if (parsedUrl.pathname === '/api/status') {
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({
+                    waitingUsers: waitingUsers.length,
+                    activeConnections: activeConnections.size / 2, // Divide by 2 since each connection is stored twice
+                    totalSessions: userSessions.size,
+                    waitingUserIds: waitingUsers
+                }))
+                return
+            }
+
             await handle(req, res, parsedUrl)
         } catch (err) {
             console.error('Error occurred handling', req.url, err)
@@ -145,9 +158,9 @@ app.prepare().then(() => {
                     }
                 }
 
-                // Notify both users they are matched
-                socket.emit('matched')
-                io.to(partnerId).emit('matched')
+                // Notify both users they are matched with country info
+                socket.emit('matched', { country: user2Info.country })
+                io.to(partnerId).emit('matched', { country: user1Info.country })
 
                 console.log('Matched:', socket.id, 'with', partnerId)
             } else {

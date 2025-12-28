@@ -41,11 +41,11 @@ export default function ChatBox({ messages, isConnected }: ChatBoxProps) {
                 >
                     <div
                         className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.sender === 'you'
-                            ? 'bg-omegle-blue text-white'
-                            : 'bg-gray-300 text-gray-800'
+                            ? 'bg-omegle-blue text-black'
+                            : 'bg-gray-300 text-black'
                             }`}
                     >
-                        <p className="text-xs font-semibold mb-1">
+                        <p className="text-xs font-semibold mb-1 text-black">
                             {message.sender === 'you' ? 'You' : 'Stranger'}
                         </p>
                         {message.image && (
@@ -58,7 +58,7 @@ export default function ChatBox({ messages, isConnected }: ChatBoxProps) {
                                 />
                             </div>
                         )}
-                        <p className="text-sm break-words">{message.text}</p>
+                        <p className="text-sm break-words text-black">{message.text}</p>
                     </div>
                 </div>
             ))}

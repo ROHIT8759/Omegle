@@ -22,6 +22,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     const [isConnected, setIsConnected] = useState(false)
     const [isSearching, setIsSearching] = useState(false)
     const [messages, setMessages] = useState<Message[]>([])
+    const [strangerCountry, setStrangerCountry] = useState<string>('')
     const [connectionStatus, setConnectionStatus] = useState<string>('Click "New" to start chatting')
 
     useEffect(() => {
@@ -29,20 +30,26 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
         setSocket(newSocket)
 
         newSocket.on('connect', () => {
-            console.log('Connected to server')
+            console.log('Connected to server with ID:', newSocket.id)
             // Auto-start searching when entering chat
+            console.log('Emitting find-stranger event')
             newSocket.emit('find-stranger')
             setIsSearching(true)
+            setConnectionStatus('Looking for someone you can chat with...')
         })
 
-        newSocket.on('matched', () => {
+        newSocket.on('matched', (data: any) => {
+            console.log('Matched with a stranger!', data)
             setIsConnected(true)
             setIsSearching(false)
-            setConnectionStatus('You\'re now chatting with a random stranger!')
+            const country = data?.country || 'Unknown'
+            setStrangerCountry(country)
+            setConnectionStatus(`You're now chatting with a stranger from ${country}!`)
             setMessages([])
         })
 
         newSocket.on('message', (data: any) => {
+            console.log('Message received:', data)
             const messageData = typeof data === 'string' ? { text: data, image: undefined } : data
             setMessages(prev => [...prev, {
                 text: messageData.text,
@@ -53,16 +60,20 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
         })
 
         newSocket.on('stranger-disconnected', () => {
+            console.log('Stranger disconnected')
             setIsConnected(false)
+            setStrangerCountry('')
             setConnectionStatus('Stranger has disconnected.')
         })
 
         newSocket.on('searching', () => {
+            console.log('Searching for a stranger...')
             setIsSearching(true)
             setConnectionStatus('Looking for someone you can chat with...')
         })
 
         return () => {
+            console.log('Closing socket connection')
             newSocket.close()
         }
     }, [])
@@ -72,6 +83,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
             setMessages([])
             setIsConnected(false)
             setIsSearching(true)
+            setStrangerCountry('')
             socket.emit('find-stranger')
         }
     }
@@ -104,7 +116,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
 
             <div className="flex-1 container mx-auto px-4 py-6 max-w-5xl">
                 <div className="bg-white rounded-lg shadow-xl overflow-hidden">
-                    <div className="bg-omegle-blue text-white px-6 py-3">
+                    <div className="bg-omegle-blue text-black px-6 py-3">
                         <p className="text-sm font-medium">{connectionStatus}</p>
                     </div>
 

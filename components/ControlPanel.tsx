@@ -105,7 +105,7 @@ export default function ControlPanel({
                     onKeyPress={handleKeyPress}
                     placeholder={isConnected ? "Type your message here..." : "Connect to start chatting"}
                     disabled={!isConnected}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-omegle-blue focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-omegle-blue focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-black"
                 />
                 <button
                     onClick={handleSend}
