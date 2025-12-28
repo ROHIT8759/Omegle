@@ -55,7 +55,7 @@ export default function LandingPage({ onStartChat }: LandingPageProps) {
 
                     <p className="text-sm text-gray-600 mb-2">
                         <strong>BY USING THIS SERVICE, YOU MUST AGREE TO OUR TERMS AND CONDITIONS.</strong>{' '}
-                        See Omegle's{' '}
+                        See Omegle&apos;s{' '}
                         <a href="#" className="text-blue-600 hover:underline">Terms of Service</a>{' '}
                         for more info. Parental control protections that may assist parents are commercially available and you can find more info at{' '}
                         <a href="https://www.connectsafely.org/controls/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
