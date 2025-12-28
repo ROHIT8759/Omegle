@@ -87,6 +87,19 @@ export default function RootLayout({
                     type="application/ld+json"
                     dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
                 />
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `
+                            // Suppress MetaMask injection errors
+                            window.addEventListener('error', (e) => {
+                                if (e.message.includes('MetaMask') || e.filename?.includes('inpage.js')) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }
+                            });
+                        `
+                    }}
+                />
                 {children}
             </body>
         </html>

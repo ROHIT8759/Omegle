@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 
 export default function OnlineStats() {
-    const [onlineCount, setOnlineCount] = useState<number>(0)
+    const [onlineCount, setOnlineCount] = useState<number>(5000)
+    const [baseCount] = useState<number>(() => 5000 + Math.floor(Math.random() * 500)) // Random base between 5000-5500
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -11,13 +12,15 @@ export default function OnlineStats() {
                 const response = await fetch('/api/status')
                 if (response.ok) {
                     const data = await response.json()
-                    // Total online = waiting users + (active connections * 2) since each connection has 2 users
-                    const total = data.waitingUsers + (data.activeConnections * 2)
-                    setOnlineCount(total)
+                    // Total online = base count + waiting users + (active connections * 2)
+                    const realUsers = data.waitingUsers + (data.activeConnections * 2)
+                    const randomVariation = Math.floor(Math.random() * 100) // Add 0-100 random variation
+                    setOnlineCount(baseCount + realUsers + randomVariation)
                 }
             } catch (error) {
                 console.error('Error fetching stats:', error)
-                setOnlineCount(0)
+                const randomVariation = Math.floor(Math.random() * 100)
+                setOnlineCount(baseCount + randomVariation)
             }
         }
 
@@ -25,13 +28,20 @@ export default function OnlineStats() {
         const interval = setInterval(fetchStats, 10000) // Update every 10 seconds
 
         return () => clearInterval(interval)
-    }, [])
+    }, [baseCount])
 
     return (
-        <div className="flex items-center justify-center text-sm text-gray-600 mb-4">
-            <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span><strong>{onlineCount}</strong> online now</span>
+        <div className="flex items-center justify-center mb-8">
+            <div className="bg-gradient-to-r from-green-400 to-blue-500 rounded-full px-6 py-3 shadow-lg transform hover:scale-105 transition-all">
+                <div className="flex items-center space-x-3">
+                    <div className="relative">
+                        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                        <div className="absolute inset-0 w-3 h-3 bg-white rounded-full animate-ping"></div>
+                    </div>
+                    <span className="text-white font-bold text-lg">
+                        {onlineCount.toLocaleString()} <span className="font-normal">online now</span>
+                    </span>
+                </div>
             </div>
         </div>
     )
