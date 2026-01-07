@@ -146,7 +146,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
             console.log('Searching for a stranger...')
             setIsSearching(true)
             setConnectionStatus('Looking for someone you can chat with...')
-            
+
             // Activate bot after 10 seconds if no match found
             const timeout = setTimeout(() => {
                 if (!isConnected) {
@@ -171,7 +171,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
         setStrangerCountry('AI')
         setConnectionStatus("You're now chatting with a stranger!")
         setMessages([])
-        
+
         // Send initial bot message
         setTimeout(() => {
             const greeting = botResponses[Math.floor(Math.random() * 3)] // First 3 are greetings
@@ -185,7 +185,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
 
     const getBotResponse = (userMessage: string): string => {
         const msg = userMessage.toLowerCase()
-        
+
         // Contextual responses
         if (msg.includes('hi') || msg.includes('hello') || msg.includes('hey')) {
             return botResponses[Math.floor(Math.random() * 3)]
@@ -211,7 +211,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
             ]
             return questionResponses[Math.floor(Math.random() * questionResponses.length)]
         }
-        
+
         // Random response from pool
         return botResponses[Math.floor(Math.random() * botResponses.length)]
     }
@@ -240,7 +240,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     const handleSendMessage = () => {
         if (isConnected && (message.trim() || selectedImage)) {
             const imageExpiry = selectedImage ? Date.now() + (imageTimer * 1000) : undefined
-            
+
             // Add user message
             setMessages(prev => [...prev, {
                 text: message || '📷 Image',
@@ -249,13 +249,13 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                 image: selectedImage || undefined,
                 imageExpiry
             }])
-            
+
             // Send to socket if not bot mode
             if (!isBotMode && socket) {
                 const messageData = selectedImage ? { text: message || '📷 Image', image: selectedImage, imageExpiry } : message
                 socket.emit('message', messageData)
             }
-            
+
             // Get bot response if in bot mode
             if (isBotMode && message.trim()) {
                 const responseDelay = 1000 + Math.random() * 2000 // 1-3 seconds
@@ -266,7 +266,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                         sender: 'stranger',
                         timestamp: Date.now()
                     }])
-                    
+
                     // Random follow-up question 30% of the time
                     if (Math.random() < 0.3) {
                         setTimeout(() => {
@@ -280,7 +280,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                     }
                 }, responseDelay)
             }
-            
+
             setMessage('')
             setSelectedImage(null)
             if (fileInputRef.current) {
