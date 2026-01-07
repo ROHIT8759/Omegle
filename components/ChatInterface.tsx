@@ -33,39 +33,76 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Chatbot responses
-    const botResponses = [
-        "Hey! How's it going?",
-        "What brings you here today?",
-        "Nice to meet you! Where are you from?",
-        "I'm just chilling, browsing around. You?",
-        "Haha that's interesting!",
-        "Tell me more about that",
-        "Oh cool! What do you like to do for fun?",
-        "Same here! That's awesome",
-        "What kind of music do you listen to?",
-        "Yeah, I totally get that",
-        "Do you have any hobbies?",
-        "That sounds fun! I wish I could do that",
-        "lol yeah",
-        "So what are you studying/working on?",
-        "Nice! How long have you been doing that?",
-        "I feel you",
-        "That's really cool actually",
-        "Got any plans for the weekend?",
-        "What's your favorite movie or show?",
-        "I've heard good things about that!",
-        "Honestly same lol",
-        "What's the best thing that happened to you recently?",
-        "That's dope!",
-        "Are you into gaming at all?",
-        "What languages do you speak?",
-        "Where would you like to travel?",
-        "What's your favorite food?",
-        "I'm more of a night owl tbh",
-        "Do you prefer coffee or tea?",
-        "What's something you're really passionate about?"
-    ]
+    // Chatbot responses - more natural and diverse
+    const botResponses = {
+        greetings: [
+            "Hey! How's it going?",
+            "Hi there! What's up?",
+            "Hello! Nice to meet you",
+            "Yo! How are you doing?",
+            "Hey hey! What brings you here?"
+        ],
+        questions: [
+            "What do you like to do for fun?",
+            "What kind of music are you into?",
+            "Got any hobbies?",
+            "What are you studying/working on?",
+            "What's your favorite movie or show?",
+            "Are you into gaming at all?",
+            "What languages do you speak?",
+            "Where would you like to travel?",
+            "What's your favorite food?",
+            "Do you prefer coffee or tea?",
+            "What's something you're really passionate about?",
+            "Do you play any sports?",
+            "What's your dream job?",
+            "Are you a morning person or night owl?",
+            "What's the last book you read?",
+            "Do you have any pets?",
+            "What's your favorite season?",
+            "Are you into any TV series right now?"
+        ],
+        acknowledgments: [
+            "Oh cool! That's awesome",
+            "Haha that's interesting!",
+            "Yeah, I totally get that",
+            "That sounds fun!",
+            "lol yeah",
+            "I feel you",
+            "That's really cool actually",
+            "Honestly same lol",
+            "That's dope!",
+            "Nice! I've heard good things about that",
+            "Oh wow, that's impressive!",
+            "Damn, that's actually really cool",
+            "No way! That's sick",
+            "For real? That's crazy",
+            "Relatable af",
+            "Facts tho"
+        ],
+        followUps: [
+            "Tell me more about that",
+            "How long have you been doing that?",
+            "What got you into that?",
+            "That must be interesting!",
+            "Would you recommend it?",
+            "What's the best part about it?",
+            "Have you been doing that for long?",
+            "What's your favorite thing about it?"
+        ],
+        casual: [
+            "Same here tbh",
+            "I wish I could do that",
+            "I'm just chilling, browsing around",
+            "Got any plans for the weekend?",
+            "What's the best thing that happened to you recently?",
+            "I'm more of a night owl tbh",
+            "Been meaning to try that",
+            "Sounds chill ngl",
+            "Lowkey jealous lol",
+            "That's on my bucket list"
+        ]
+    }
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -116,6 +153,12 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
 
         newSocket.on('matched', (data: any) => {
             console.log('Matched with a stranger!', data)
+            // Clear timeout when real match is found
+            if (searchTimeout) {
+                clearTimeout(searchTimeout)
+                setSearchTimeout(null)
+            }
+            setIsBotMode(false) // Ensure bot mode is off
             setIsConnected(true)
             setIsSearching(false)
             const country = data?.country || 'Unknown'
@@ -146,14 +189,20 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
             console.log('Searching for a stranger...')
             setIsSearching(true)
             setConnectionStatus('Looking for someone you can chat with...')
-
-            // Activate bot after 10 seconds if no match found
+            
+            // Clear any existing timeout
+            if (searchTimeout) {
+                clearTimeout(searchTimeout)
+            }
+            
+            // Activate bot after 15 seconds if no match found
             const timeout = setTimeout(() => {
-                if (!isConnected) {
-                    console.log('No users found, activating bot mode')
+                console.log('Checking if connected:', isConnected)
+                if (!isConnected && !isBotMode) {
+                    console.log('No users found after 15s, activating bot mode')
                     activateBotMode()
                 }
-            }, 10000) // 10 seconds
+            }, 15000) // 15 seconds
             setSearchTimeout(timeout)
         })
 
@@ -165,16 +214,17 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     }, [showRules, isConnected])
 
     const activateBotMode = () => {
+        console.log('Activating bot mode')
         setIsBotMode(true)
         setIsConnected(true)
         setIsSearching(false)
-        setStrangerCountry('AI')
+        setStrangerCountry('Unknown')
         setConnectionStatus("You're now chatting with a stranger!")
         setMessages([])
 
         // Send initial bot message
         setTimeout(() => {
-            const greeting = botResponses[Math.floor(Math.random() * 3)] // First 3 are greetings
+            const greeting = botResponses.greetings[Math.floor(Math.random() * botResponses.greetings.length)]
             setMessages(prev => [...prev, {
                 text: greeting,
                 sender: 'stranger',
@@ -184,40 +234,96 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     }
 
     const getBotResponse = (userMessage: string): string => {
-        const msg = userMessage.toLowerCase()
-
-        // Contextual responses
-        if (msg.includes('hi') || msg.includes('hello') || msg.includes('hey')) {
-            return botResponses[Math.floor(Math.random() * 3)]
+        const msg = userMessage.toLowerCase().trim()
+        
+        // Track conversation context
+        const lastMessages = messages.slice(-3).map(m => m.text.toLowerCase())
+        
+        // Greetings
+        if (msg.match(/^(hi|hello|hey|yo|sup|hola|hii+|hey+)/)) {
+            return botResponses.greetings[Math.floor(Math.random() * botResponses.greetings.length)]
         }
-        if (msg.includes('how are you') || msg.includes('how r u')) {
-            return "I'm doing great! Thanks for asking. How about you?"
+        
+        // How are you variations
+        if (msg.match(/(how are you|how r u|how ru|hru|wyd|what.*doing|wassup|sup)/)) {
+            const responses = [
+                "I'm doing great! Thanks for asking. How about you?",
+                "Pretty good! Just hanging out. You?",
+                "Not bad! Kinda bored tbh. What about you?",
+                "Good good! Just vibing. Wbu?"
+            ]
+            return responses[Math.floor(Math.random() * responses.length)]
         }
-        if (msg.includes('age') || msg.includes('old')) {
-            return "I'm 22. You?"
+        
+        // Age questions
+        if (msg.match(/(how old|your age|age\?|u\s*\d+)/)) {
+            const ages = [19, 20, 21, 22, 23]
+            return `I'm ${ages[Math.floor(Math.random() * ages.length)]}. You?`
         }
-        if (msg.includes('from') || msg.includes('where')) {
-            return "I'm from the US. How about you?"
+        
+        // Location questions
+        if (msg.match(/(where.*from|where.*live|your country|which country|location)/)) {
+            const places = ['the US', 'Canada', 'UK', 'Australia']
+            return `I'm from ${places[Math.floor(Math.random() * places.length)]}. How about you?`
         }
-        if (msg.includes('bye') || msg.includes('gtg') || msg.includes('gotta go')) {
+        
+        // Gender questions (deflect)
+        if (msg.match(/(gender|boy|girl|male|female|guy|girl|asl|a\/s\/l)/)) {
+            return "Does it really matter? Let's just chat!"
+        }
+        
+        // Goodbye
+        if (msg.match(/(bye|gtg|gotta go|have to go|see ya|later|goodbye)/)) {
             return "Nice chatting with you! Take care!"
         }
-        if (msg.includes('?')) {
-            // Questions get specific responses
-            const questionResponses = [
-                "Hmm, good question! I'd say " + botResponses[Math.floor(Math.random() * botResponses.length)].toLowerCase(),
-                "Let me think... " + botResponses[Math.floor(Math.random() * botResponses.length)],
-                botResponses[Math.floor(Math.random() * botResponses.length)]
-            ]
-            return questionResponses[Math.floor(Math.random() * questionResponses.length)]
+        
+        // Compliments
+        if (msg.match(/(cool|awesome|nice|great|amazing|interesting)/)) {
+            return botResponses.acknowledgments[Math.floor(Math.random() * botResponses.acknowledgments.length)]
         }
-
-        // Random response from pool
-        return botResponses[Math.floor(Math.random() * botResponses.length)]
+        
+        // Hobbies/interests mentioned
+        if (msg.match(/(gaming|games|play|music|sports|reading|movies|tv|netflix|anime|coding|programming)/)) {
+            return botResponses.followUps[Math.floor(Math.random() * botResponses.followUps.length)]
+        }
+        
+        // Short responses
+        if (msg.length < 10) {
+            const shortResponses = [
+                ...botResponses.acknowledgments,
+                ...botResponses.questions.slice(0, 5)
+            ]
+            return shortResponses[Math.floor(Math.random() * shortResponses.length)]
+        }
+        
+        // Questions get engaging responses
+        if (msg.includes('?')) {
+            const allResponses = [
+                ...botResponses.acknowledgments,
+                ...botResponses.questions,
+                ...botResponses.followUps
+            ]
+            return allResponses[Math.floor(Math.random() * allResponses.length)]
+        }
+        
+        // Vary responses based on message count to avoid repetition
+        const responseType = Math.random()
+        if (responseType < 0.4) {
+            return botResponses.acknowledgments[Math.floor(Math.random() * botResponses.acknowledgments.length)]
+        } else if (responseType < 0.7) {
+            return botResponses.questions[Math.floor(Math.random() * botResponses.questions.length)]
+        } else {
+            return botResponses.casual[Math.floor(Math.random() * botResponses.casual.length)]
+        }
     }
 
     const handleNewChat = () => {
-        if (searchTimeout) clearTimeout(searchTimeout)
+        console.log('Starting new chat, clearing bot mode')
+        // Clear any existing timeout
+        if (searchTimeout) {
+            clearTimeout(searchTimeout)
+            setSearchTimeout(null)
+        }
         setIsBotMode(false)
         if (socket) {
             setMessages([])
@@ -258,7 +364,7 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
 
             // Get bot response if in bot mode
             if (isBotMode && message.trim()) {
-                const responseDelay = 1000 + Math.random() * 2000 // 1-3 seconds
+                const responseDelay = 1500 + Math.random() * 2500 // 1.5-4 seconds
                 setTimeout(() => {
                     const botReply = getBotResponse(message)
                     setMessages(prev => [...prev, {
@@ -266,19 +372,17 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                         sender: 'stranger',
                         timestamp: Date.now()
                     }])
-
-                    // Random follow-up question 30% of the time
-                    if (Math.random() < 0.3) {
+                    
+                    // Ask follow-up question 40% of the time after acknowledgments
+                    if (Math.random() < 0.4 && botReply.length < 50) {
                         setTimeout(() => {
-                            const followUp = botResponses[Math.floor(Math.random() * botResponses.length)]
+                            const followUp = botResponses.questions[Math.floor(Math.random() * botResponses.questions.length)]
                             setMessages(prev => [...prev, {
                                 text: followUp,
                                 sender: 'stranger',
                                 timestamp: Date.now()
                             }])
-                        }, 2000 + Math.random() * 3000)
-                    }
-                }, responseDelay)
+                        }, 2500 + Math.random() * 2500)
             }
 
             setMessage('')
