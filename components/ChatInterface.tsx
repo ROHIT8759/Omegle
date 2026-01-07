@@ -142,6 +142,32 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
         return () => clearInterval(interval)
     }, [])
 
+    const activateBotMode = () => {
+        console.log('Activating bot mode')
+        // Randomly select a name and age for this bot session
+        const selectedName = botNames[Math.floor(Math.random() * botNames.length)]
+        const selectedAge = Math.floor(Math.random() * 8) + 18 // 18-25
+        setBotName(selectedName)
+        setBotAge(selectedAge)
+
+        setIsBotMode(true)
+        setIsConnected(true)
+        setIsSearching(false)
+        setStrangerCountry('Unknown')
+        setConnectionStatus("You're now chatting with a stranger!")
+        setMessages([])
+
+        // Send initial bot message
+        setTimeout(() => {
+            const greeting = botResponses.greetings[Math.floor(Math.random() * botResponses.greetings.length)]
+            setMessages(prev => [...prev, {
+                text: greeting,
+                sender: 'stranger',
+                timestamp: Date.now()
+            }])
+        }, 1500)
+    }
+
     useEffect(() => {
         if (showRules) return // Don't connect until rules are accepted
 
@@ -197,499 +223,473 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                 image: messageData.image
             }])
         })
-    })
 
-    newSocket.on('stranger-disconnected', () => {
-        console.log('Stranger disconnected')
-        setIsConnected(false)
-        setStrangerCountry('')
-        setConnectionStatus('Stranger has disconnected.')
-    })
+        newSocket.on('stranger-disconnected', () => {
+            console.log('Stranger disconnected')
+            setIsConnected(false)
+            setStrangerCountry('')
+            setConnectionStatus('Stranger has disconnected.')
+        })
 
-    newSocket.on('searching', () => {
-        console.log('Searching for a stranger...')
-        setIsSearching(true)
-        setConnectionStatus('Looking for someone you can chat with...')
+        newSocket.on('searching', () => {
+            console.log('Searching for a stranger...')
+            setIsSearching(true)
+            setConnectionStatus('Looking for someone you can chat with...')
 
+            // Clear any existing timeout
+            if (searchTimeout) {
+                clearTimeout(searchTimeout)
+            }
+
+            // Activate bot after 15 seconds if no match found
+            const timeout = setTimeout(() => {
+                // Use the latest state values by checking inside the timeout
+                setIsConnected(currentConnected => {
+                    setIsBotMode(currentBotMode => {
+                        console.log('Timeout check - connected:', currentConnected, 'botMode:', currentBotMode)
+                        if (!currentConnected && !currentBotMode) {
+                            console.log('No users found after 15s, activating bot mode')
+                            activateBotMode()
+                        }
+                        return currentBotMode
+                    })
+                    return currentConnected
+                })
+            }, 15000) // 15 seconds
+            setSearchTimeout(timeout)
+        })
+
+        return () => {
+            console.log('Closing socket connection')
+            if (searchTimeout) clearTimeout(searchTimeout)
+            newSocket.close()
+        }
+    }, [showRules]) // Removed isConnected from dependencies to prevent re-initialization
+
+    const getBotResponse = (userMessage: string): string => {
+        const msg = userMessage.toLowerCase().trim()
+
+        // Track conversation context
+        const lastMessages = messages.slice(-3).map(m => m.text.toLowerCase())
+
+        // Greetings
+        if (msg.match(/^(hi|hello|hey|yo|sup|hola|hii+|hey+)/)) {
+            return botResponses.greetings[Math.floor(Math.random() * botResponses.greetings.length)]
+        }
+
+        // How are you variations
+        if (msg.match(/(how are you|how r u|how ru|hru|wyd|what.*doing|wassup|sup)/)) {
+            const responses = [
+                "I'm doing great! Thanks for asking. How about you?",
+                "Pretty good! Just hanging out. You?",
+                "Not bad! Kinda bored tbh. What about you?",
+                "Good good! Just vibing. Wbu?"
+            ]
+            return responses[Math.floor(Math.random() * responses.length)]
+        }
+
+        // Age questions
+        if (msg.match(/(how old|your age|age\?|u\s*\d+|old are you)/)) {
+            return `I'm ${botAge}. You?`
+        }
+
+        // Name questions
+        if (msg.match(/(your name|what's your name|whats your name|name\?|called|who are you|ur name|u name)/)) {
+            return `I'm ${botName}. What's yours?`
+        }
+
+        // Location questions
+        if (msg.match(/(where.*from|where.*live|your country|which country|location)/)) {
+            const places = ['the US', 'Canada', 'UK', 'Australia']
+            return `I'm from ${places[Math.floor(Math.random() * places.length)]}. How about you?`
+        }
+
+        // Gender questions (deflect with female response)
+        if (msg.match(/(gender|boy|girl|male|female|guy|asl|a\/s\/l|m or f|are you a)/)) {
+            return "I'm a girl. You?"
+        }
+
+        // Goodbye
+        if (msg.match(/(bye|gtg|gotta go|have to go|see ya|later|goodbye)/)) {
+            return "Nice chatting with you! Take care!"
+        }
+
+        // Compliments
+        if (msg.match(/(cool|awesome|nice|great|amazing|interesting)/)) {
+            return botResponses.acknowledgments[Math.floor(Math.random() * botResponses.acknowledgments.length)]
+        }
+
+        // Hobbies/interests mentioned
+        if (msg.match(/(gaming|games|play|music|sports|reading|movies|tv|netflix|anime|coding|programming)/)) {
+            return botResponses.followUps[Math.floor(Math.random() * botResponses.followUps.length)]
+        }
+
+        // Short responses
+        if (msg.length < 10) {
+            const shortResponses = [
+                ...botResponses.acknowledgments,
+                ...botResponses.questions.slice(0, 5)
+            ]
+            return shortResponses[Math.floor(Math.random() * shortResponses.length)]
+        }
+
+        // Questions get engaging responses
+        if (msg.includes('?')) {
+            const allResponses = [
+                ...botResponses.acknowledgments,
+                ...botResponses.questions,
+                ...botResponses.followUps
+            ]
+            return allResponses[Math.floor(Math.random() * allResponses.length)]
+        }
+
+        // Vary responses based on message count to avoid repetition
+        const responseType = Math.random()
+        if (responseType < 0.4) {
+            return botResponses.acknowledgments[Math.floor(Math.random() * botResponses.acknowledgments.length)]
+        } else if (responseType < 0.7) {
+            return botResponses.questions[Math.floor(Math.random() * botResponses.questions.length)]
+        } else {
+            return botResponses.casual[Math.floor(Math.random() * botResponses.casual.length)]
+        }
+    }
+    const handleNewChat = () => {
+        console.log('Starting new chat, clearing bot mode')
         // Clear any existing timeout
         if (searchTimeout) {
             clearTimeout(searchTimeout)
+            setSearchTimeout(null)
         }
+        setIsBotMode(false)
+        setBotName('') // Reset bot identity
+        setBotAge(0)
+        if (socket) {
+            setMessages([])
+            setIsConnected(false)
+            setIsSearching(true)
+            setStrangerCountry('')
+            socket.emit('find-stranger')
+        }
+    }
 
-        // Activate bot after 15 seconds if no match found
-        const timeout = setTimeout(() => {
-            // Use the latest state values by checking inside the timeout
-            setIsConnected(currentConnected => {
-                setIsBotMode(currentBotMode => {
-                    console.log('Timeout check - connected:', currentConnected, 'botMode:', currentBotMode)
-                    if (!currentConnected && !currentBotMode) {
-                        console.log('No users found after 15s, activating bot mode')
-                        activateBotMode()
+    const handleStopChat = () => {
+        if (socket) {
+            socket.emit('disconnect-chat')
+            setIsConnected(false)
+            setIsSearching(false)
+            setConnectionStatus('You have disconnected.')
+        }
+    }
+
+    const handleSendMessage = () => {
+        if (isConnected && (message.trim() || selectedImage)) {
+            // Store timer duration, not expiry time
+            const imageTimerDuration = selectedImage ? imageTimer : undefined
+
+            // Add user message
+            setMessages(prev => [...prev, {
+                text: message || '📷 Image',
+                sender: 'you',
+                timestamp: Date.now(),
+                image: selectedImage || undefined,
+                imageTimerDuration
+            }])
+
+            // Send to socket if not bot mode
+            if (!isBotMode && socket) {
+                const messageData = selectedImage ? { text: message || '📷 Image', image: selectedImage, imageTimerDuration } : message
+                socket.emit('message', messageData)
+                console.log('Sent message to real user')
+            }
+
+            // Get bot response if in bot mode
+            if (isBotMode && message.trim()) {
+                const responseDelay = 1500 + Math.random() * 2500 // 1.5-4 seconds
+                setTimeout(() => {
+                    const botReply = getBotResponse(message)
+                    setMessages(prev => [...prev, {
+                        text: botReply,
+                        sender: 'stranger',
+                        timestamp: Date.now()
+                    }])
+
+                    // Ask follow-up question 40% of the time after acknowledgments
+                    if (Math.random() < 0.4 && botReply.length < 50) {
+                        setTimeout(() => {
+                            const followUp = botResponses.questions[Math.floor(Math.random() * botResponses.questions.length)]
+                            setMessages(prev => [...prev, {
+                                text: followUp,
+                                sender: 'stranger',
+                                timestamp: Date.now()
+                            }])
+                        }, 2500 + Math.random() * 2500)
                     }
-                    return currentBotMode
-                })
-                return currentConnected
-            })
-        }, 15000) // 15 seconds
-        setSearchTimeout(timeout)
-    })
-
-    return () => {
-        console.log('Closing socket connection')
-        if (searchTimeout) clearTimeout(searchTimeout)
-        newSocket.close()
-    }
-}, [showRules]) // Removed isConnected from dependencies to prevent re-initialization
-
-const activateBotMode = () => {
-    console.log('Activating bot mode')
-    // Randomly select a name and age for this bot session
-    const selectedName = botNames[Math.floor(Math.random() * botNames.length)]
-    const selectedAge = Math.floor(Math.random() * 8) + 14 // 18-25
-    setBotName(selectedName)
-    setBotAge(selectedAge)
-
-    setIsBotMode(true)
-    setIsConnected(true)
-    setIsSearching(false)
-    setStrangerCountry('Unknown')
-    setConnectionStatus("You're now chatting with a stranger!")
-    setMessages([])
-
-    // Send initial bot message
-    setTimeout(() => {
-        const greeting = botResponses.greetings[Math.floor(Math.random() * botResponses.greetings.length)]
-        setMessages(prev => [...prev, {
-            text: greeting,
-            sender: 'stranger',
-            timestamp: Date.now()
-        }])
-    }, 1500)
-}
-
-const getBotResponse = (userMessage: string): string => {
-    const msg = userMessage.toLowerCase().trim()
-
-    // Track conversation context
-    const lastMessages = messages.slice(-3).map(m => m.text.toLowerCase())
-
-    // Greetings
-    if (msg.match(/^(hi|hello|hey|yo|sup|hola|hii+|hey+)/)) {
-        return botResponses.greetings[Math.floor(Math.random() * botResponses.greetings.length)]
-    }
-
-    // How are you variations
-    if (msg.match(/(how are you|how r u|how ru|hru|wyd|what.*doing|wassup|sup)/)) {
-        const responses = [
-            "I'm doing great! Thanks for asking. How about you?",
-            "Pretty good! Just hanging out. You?",
-            "Not bad! Kinda bored tbh. What about you?",
-            "Good good! Just vibing. Wbu?"
-        ]
-        return responses[Math.floor(Math.random() * responses.length)]
-    }
-
-    // Age questions
-    if (msg.match(/(how old|your age|age\?|u\s*\d+|old are you)/)) {
-        return `I'm ${botAge}. You?`
-    }
-
-    // Name questions
-    if (msg.match(/(your name|what's your name|whats your name|name\?|called|who are you|ur name|u name)/)) {
-        return `I'm ${botName}. What's yours?`
-    }
-
-    // Location questions
-    if (msg.match(/(where.*from|where.*live|your country|which country|location)/)) {
-        const places = ['the US', 'Canada', 'UK', 'Australia']
-        return `I'm from ${places[Math.floor(Math.random() * places.length)]}. How about you?`
-    }
-
-    // Gender questions (deflect with female response)
-    if (msg.match(/(gender|boy|girl|male|female|guy|asl|a\/s\/l|m or f|are you a)/)) {
-        return "I'm a girl. You?"
-    }
-
-    // Goodbye
-    if (msg.match(/(bye|gtg|gotta go|have to go|see ya|later|goodbye)/)) {
-        return "Nice chatting with you! Take care!"
-    }
-
-    // Compliments
-    if (msg.match(/(cool|awesome|nice|great|amazing|interesting)/)) {
-        return botResponses.acknowledgments[Math.floor(Math.random() * botResponses.acknowledgments.length)]
-    }
-
-    // Hobbies/interests mentioned
-    if (msg.match(/(gaming|games|play|music|sports|reading|movies|tv|netflix|anime|coding|programming)/)) {
-        return botResponses.followUps[Math.floor(Math.random() * botResponses.followUps.length)]
-    }
-
-    // Short responses
-    if (msg.length < 10) {
-        const shortResponses = [
-            ...botResponses.acknowledgments,
-            ...botResponses.questions.slice(0, 5)
-        ]
-        return shortResponses[Math.floor(Math.random() * shortResponses.length)]
-    }
-
-    // Questions get engaging responses
-    if (msg.includes('?')) {
-        const allResponses = [
-            ...botResponses.acknowledgments,
-            ...botResponses.questions,
-            ...botResponses.followUps
-        ]
-        return allResponses[Math.floor(Math.random() * allResponses.length)]
-    }
-
-    // Vary responses based on message count to avoid repetition
-    const responseType = Math.random()
-    if (responseType < 0.4) {
-        return botResponses.acknowledgments[Math.floor(Math.random() * botResponses.acknowledgments.length)]
-    } else if (responseType < 0.7) {
-        return botResponses.questions[Math.floor(Math.random() * botResponses.questions.length)]
-    } else {
-        return botResponses.casual[Math.floor(Math.random() * botResponses.casual.length)]
-    }
-}
-
-const handleNewChat = () => {
-    console.log('Starting new chat, clearing bot mode')
-    // Clear any existing timeout
-    if (searchTimeout) {
-        clearTimeout(searchTimeout)
-        setSearchTimeout(null)
-    }
-    setIsBotMode(false)
-    setBotName('') // Reset bot identity
-    setBotAge(0)
-    if (socket) {
-        setMessages([])
-        setIsConnected(false)
-        setIsSearching(true)
-        setStrangerCountry('')
-        socket.emit('find-stranger')
-    }
-}
-
-const handleStopChat = () => {
-    if (socket) {
-        socket.emit('disconnect-chat')
-        setIsConnected(false)
-        setIsSearching(false)
-        setConnectionStatus('You have disconnected.')
-    }
-}
-
-const handleSendMessage = () => {
-    if (isConnected && (message.trim() || selectedImage)) {
-        // Store timer duration, not expiry time
-        const imageTimerDuration = selectedImage ? imageTimer : undefined
-
-        // Add user message
-        setMessages(prev => [...prev, {
-            text: message || '📷 Image',
-            sender: 'you',
-            timestamp: Date.now(),
-            image: selectedImage || undefined,
-            imageTimerDuration
-        }])
-
-        // Send to socket if not bot mode
-        if (!isBotMode && socket) {
-            const messageData = selectedImage ? { text: message || '📷 Image', image: selectedImage, imageTimerDuration } : message
-            socket.emit('message', messageData)
-            console.log('Sent message to real user')
-        }
-
-        // Get bot response if in bot mode
-        if (isBotMode && message.trim()) {
-            const responseDelay = 1500 + Math.random() * 2500 // 1.5-4 seconds
-            setTimeout(() => {
-                const botReply = getBotResponse(message)
-                setMessages(prev => [...prev, {
-                    text: botReply,
-                    sender: 'stranger',
-                    timestamp: Date.now()
-                }])
-
-                // Ask follow-up question 40% of the time after acknowledgments
-                if (Math.random() < 0.4 && botReply.length < 50) {
-                    setTimeout(() => {
-                        const followUp = botResponses.questions[Math.floor(Math.random() * botResponses.questions.length)]
-                        setMessages(prev => [...prev, {
-                            text: followUp,
-                            sender: 'stranger',
-                            timestamp: Date.now()
-                        }])
-                    }, 2500 + Math.random() * 2500)
-                }
-
-                setMessage('')
-                setSelectedImage(null)
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = ''
-                }
+                }, responseDelay)
             }
-    }
 
-        const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0]
-            if (file) {
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('Image size must be less than 5MB')
-                    return
-                }
-                const reader = new FileReader()
-                reader.onloadend = () => {
-                    setSelectedImage(reader.result as string)
-                }
-                reader.readAsDataURL(file)
+            setMessage('')
+            setSelectedImage(null)
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
             }
         }
+    }
 
-        const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSendMessage()
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                alert('Image size must be less than 5MB')
+                return
             }
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setSelectedImage(reader.result as string)
+            }
+            reader.readAsDataURL(file)
         }
+    }
 
-        const handleAgreeRules = () => {
-            setShowRules(false)
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSendMessage()
         }
+    }
 
-        return (
-            <div className="flex flex-col h-screen bg-white">
-                {/* Header */}
-                <header className="bg-white border-b border-gray-300 px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none">
-                            <circle cx="24" cy="24" r="22" fill="#0099ff" fillOpacity="0.2" />
-                            <text x="24" y="32" fontSize="24" fill="#0099ff" fontWeight="bold" textAnchor="middle">O</text>
-                        </svg>
-                        <div>
-                            <h1 className="text-2xl font-bold" style={{ color: '#ff6600' }}>omegle</h1>
-                            <p className="text-sm text-gray-600">Talk to strangers!</p>
-                        </div>
-                    </div>
-                    <OnlineStats />
-                </header>
+    const handleAgreeRules = () => {
+        setShowRules(false)
+    }
 
-                {/* Rules Modal */}
-                {showRules && (
-                    <div className="absolute inset-0 bg-white z-50 flex items-start justify-center pt-20 px-4">
-                        <div className="bg-white max-w-2xl w-full">
-                            <div className="mb-6">
-                                <p className="text-blue-500 text-sm mb-4">
-                                    <span className="font-bold">omegleweb.io</span>: Talk to strangers!
-                                </p>
-                                <h2 className="text-xl font-bold mb-4">Welcome to OmegleWeb.io, please read the rules below:</h2>
-                                <p className="text-red-600 font-bold mb-3">You must be at least 18 years old</p>
-                                <ul className="space-y-2 text-gray-700 mb-6">
-                                    <li>No nudity, hate speech, or harassment</li>
-                                    <li>Do not ask for gender. This is not a dating site</li>
-                                    <li>Respect others and be kind</li>
-                                    <li>Violators will be banned</li>
-                                </ul>
-                                <button
-                                    onClick={handleAgreeRules}
-                                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded"
-                                >
-                                    I Agree
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Chat Status */}
-                <div className="bg-gray-100 px-4 py-2 text-sm text-gray-700 border-b border-gray-300">
-                    {connectionStatus}
-                </div>
-
-                {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 bg-white">
-                    {messages.length === 0 && !isSearching && (
-                        <div className="flex items-center justify-center h-full text-gray-400">
-                            <p>Start chatting by clicking Skip to find a stranger!</p>
-                        </div>
-                    )}
-
-                    {messages.map((msg, index) => {
-                        // Calculate time remaining based on when image was opened
-                        let timeRemaining: number | null = null
-                        let isExpired = false
-
-                        if (msg.image && msg.imageTimerDuration !== undefined) {
-                            if (msg.imageTimerDuration === 0) {
-                                // Never expires
-                                timeRemaining = null
-                            } else if (msg.imageOpenedAt) {
-                                // Timer started when opened
-                                const expiryTime = msg.imageOpenedAt + (msg.imageTimerDuration * 1000)
-                                timeRemaining = Math.max(0, Math.floor((expiryTime - currentTime) / 1000))
-                                isExpired = timeRemaining === 0
-                            }
-                        }
-
-                        const handleImageClick = () => {
-                            if (msg.image && !msg.imageOpenedAt && msg.imageTimerDuration && msg.imageTimerDuration > 0) {
-                                // Start timer on first click
-                                setMessages(prev => prev.map((m, i) =>
-                                    i === index ? { ...m, imageOpenedAt: Date.now() } : m
-                                ))
-                            }
-                            // Open image in modal instead of new tab
-                            setViewingImage(msg.image || null)
-                        }
-
-                        return (
-                            <div key={index} className="mb-2">
-                                <span className="font-bold text-sm" style={{ color: msg.sender === 'you' ? '#0000FF' : '#FF0000' }}>
-                                    {msg.sender === 'you' ? 'You' : 'Stranger'}:
-                                </span>
-                                {msg.image && (
-                                    <div className="ml-2 mt-1 inline-block relative">
-                                        <img
-                                            src={msg.image}
-                                            alt="Shared image"
-                                            className="max-w-xs h-auto rounded cursor-pointer hover:opacity-90 border border-gray-300"
-                                            onClick={handleImageClick}
-                                        />
-                                        {timeRemaining !== null && timeRemaining > 0 && (
-                                            <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs font-bold">
-                                                ⏱️ {timeRemaining}s
-                                            </div>
-                                        )}
-                                        {isExpired && (
-                                            <div className="absolute inset-0 bg-gray-200 bg-opacity-90 flex items-center justify-center rounded">
-                                                <span className="text-gray-600 text-sm font-semibold">🔒 Image expired</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                {msg.text && msg.text !== '📷 Image' && (
-                                    <span className="ml-2 text-sm text-black">{msg.text}</span>
-                                )}
-                            </div>
-                        )
-                    })}
-                    <div ref={messagesEndRef} />
-                </div>
-
-                {/* Control Panel */}
-                <div className="border-t border-gray-300 bg-white">
-                    {/* Image Preview */}
-                    {selectedImage && (
-                        <div className="p-3 bg-gray-50 border-b border-gray-300">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center space-x-3">
-                                    <img src={selectedImage} alt="Preview" className="h-16 w-16 object-cover rounded border border-gray-300" />
-                                    <span className="text-sm text-gray-600">Image ready to send</span>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        setSelectedImage(null)
-                                        if (fileInputRef.current) fileInputRef.current.value = ''
-                                    }}
-                                    className="text-red-500 hover:text-red-700 font-semibold text-sm"
-                                >
-                                    Remove
-                                </button>
-                            </div>
-                            {/* Timer selector */}
-                            <div className="flex items-center space-x-2 text-sm">
-                                <span className="text-gray-600">Image expires after opening:</span>
-                                <select
-                                    value={imageTimer}
-                                    onChange={(e) => setImageTimer(Number(e.target.value))}
-                                    className="border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value={0}>Never</option>
-                                    <option value={15}>15 seconds</option>
-                                    <option value={30}>30 seconds</option>
-                                    <option value={60}>1 minute</option>
-                                    <option value={120}>2 minutes</option>
-                                    <option value={300}>5 minutes</option>
-                                </select>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="p-2 flex items-center space-x-2">
-                        <button
-                            onClick={handleNewChat}
-                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded text-lg min-w-[120px]"
-                        >
-                            Skip
-                            <div className="text-xs font-normal">Esc</div>
-                        </button>
-
-                        {/* Hidden file input */}
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageSelect}
-                            disabled={!isConnected}
-                            className="hidden"
-                            id="image-upload"
-                        />
-
-                        {/* Image upload button */}
-                        <label
-                            htmlFor="image-upload"
-                            className={`cursor-pointer bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded text-2xl ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title="Upload image"
-                        >
-                            📎
-                        </label>
-
-                        <input
-                            type="text"
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            placeholder="Type a message..."
-                            disabled={!isConnected}
-                            className="flex-1 px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 text-black"
-                        />
-
-                        <button
-                            onClick={handleSendMessage}
-                            disabled={!isConnected || (!message.trim() && !selectedImage)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded disabled:bg-gray-300 disabled:cursor-not-allowed text-lg min-w-[120px]"
-                        >
-                            Send
-                            <div className="text-xs font-normal">Enter</div>
-                        </button>
+    return (
+        <div className="flex flex-col h-screen bg-white">
+            {/* Header */}
+            <header className="bg-white border-b border-gray-300 px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                    <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none">
+                        <circle cx="24" cy="24" r="22" fill="#0099ff" fillOpacity="0.2" />
+                        <text x="24" y="32" fontSize="24" fill="#0099ff" fontWeight="bold" textAnchor="middle">O</text>
+                    </svg>
+                    <div>
+                        <h1 className="text-2xl font-bold" style={{ color: '#ff6600' }}>omegle</h1>
+                        <p className="text-sm text-gray-600">Talk to strangers!</p>
                     </div>
                 </div>
+                <OnlineStats />
+            </header>
 
-                {/* Image Modal/Lightbox */}
-                {viewingImage && (
-                    <div
-                        className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
-                        onClick={() => setViewingImage(null)}
-                    >
-                        <button
-                            onClick={() => setViewingImage(null)}
-                            className="absolute top-4 right-4 text-white text-4xl font-bold hover:text-gray-300 z-10"
-                            title="Close"
-                        >
-                            ×
-                        </button>
-                        <img
-                            src={viewingImage}
-                            alt="Full size"
-                            className="max-w-full max-h-full object-contain"
-                            onClick={(e) => e.stopPropagation()}
-                        />
+            {/* Rules Modal */}
+            {showRules && (
+                <div className="absolute inset-0 bg-white z-50 flex items-start justify-center pt-20 px-4">
+                    <div className="bg-white max-w-2xl w-full">
+                        <div className="mb-6">
+                            <p className="text-blue-500 text-sm mb-4">
+                                <span className="font-bold">omegleweb.io</span>: Talk to strangers!
+                            </p>
+                            <h2 className="text-xl font-bold mb-4">Welcome to OmegleWeb.io, please read the rules below:</h2>
+                            <p className="text-red-600 font-bold mb-3">You must be at least 18 years old</p>
+                            <ul className="space-y-2 text-gray-700 mb-6">
+                                <li>No nudity, hate speech, or harassment</li>
+                                <li>Do not ask for gender. This is not a dating site</li>
+                                <li>Respect others and be kind</li>
+                                <li>Violators will be banned</li>
+                            </ul>
+                            <button
+                                onClick={handleAgreeRules}
+                                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded"
+                            >
+                                I Agree
+                            </button>
+                        </div>
                     </div>
-                )}
+                </div>
+            )}
+
+            {/* Chat Status */}
+            <div className="bg-gray-100 px-4 py-2 text-sm text-gray-700 border-b border-gray-300">
+                {connectionStatus}
             </div>
-        )
-    }
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 bg-white">
+                {messages.length === 0 && !isSearching && (
+                    <div className="flex items-center justify-center h-full text-gray-400">
+                        <p>Start chatting by clicking Skip to find a stranger!</p>
+                    </div>
+                )}
+
+                {messages.map((msg, index) => {
+                    // Calculate time remaining based on when image was opened
+                    let timeRemaining: number | null = null
+                    let isExpired = false
+
+                    if (msg.image && msg.imageTimerDuration !== undefined) {
+                        if (msg.imageTimerDuration === 0) {
+                            // Never expires
+                            timeRemaining = null
+                        } else if (msg.imageOpenedAt) {
+                            // Timer started when opened
+                            const expiryTime = msg.imageOpenedAt + (msg.imageTimerDuration * 1000)
+                            timeRemaining = Math.max(0, Math.floor((expiryTime - currentTime) / 1000))
+                            isExpired = timeRemaining === 0
+                        }
+                    }
+
+                    const handleImageClick = () => {
+                        if (msg.image && !msg.imageOpenedAt && msg.imageTimerDuration && msg.imageTimerDuration > 0) {
+                            // Start timer on first click
+                            setMessages(prev => prev.map((m, i) =>
+                                i === index ? { ...m, imageOpenedAt: Date.now() } : m
+                            ))
+                        }
+                        // Open image in modal instead of new tab
+                        setViewingImage(msg.image || null)
+                    }
+
+                    return (
+                        <div key={index} className="mb-2">
+                            <span className="font-bold text-sm" style={{ color: msg.sender === 'you' ? '#0000FF' : '#FF0000' }}>
+                                {msg.sender === 'you' ? 'You' : 'Stranger'}:
+                            </span>
+                            {msg.image && (
+                                <div className="ml-2 mt-1 inline-block relative">
+                                    <img
+                                        src={msg.image}
+                                        alt="Shared image"
+                                        className="max-w-xs h-auto rounded cursor-pointer hover:opacity-90 border border-gray-300"
+                                        onClick={handleImageClick}
+                                    />
+                                    {timeRemaining !== null && timeRemaining > 0 && (
+                                        <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs font-bold">
+                                            ⏱️ {timeRemaining}s
+                                        </div>
+                                    )}
+                                    {isExpired && (
+                                        <div className="absolute inset-0 bg-gray-200 bg-opacity-90 flex items-center justify-center rounded">
+                                            <span className="text-gray-600 text-sm font-semibold">🔒 Image expired</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {msg.text && msg.text !== '📷 Image' && (
+                                <span className="ml-2 text-sm text-black">{msg.text}</span>
+                            )}
+                        </div>
+                    )
+                })}
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Control Panel */}
+            <div className="border-t border-gray-300 bg-white">
+                {/* Image Preview */}
+                {selectedImage && (
+                    <div className="p-3 bg-gray-50 border-b border-gray-300">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center space-x-3">
+                                <img src={selectedImage} alt="Preview" className="h-16 w-16 object-cover rounded border border-gray-300" />
+                                <span className="text-sm text-gray-600">Image ready to send</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setSelectedImage(null)
+                                    if (fileInputRef.current) fileInputRef.current.value = ''
+                                }}
+                                className="text-red-500 hover:text-red-700 font-semibold text-sm"
+                            >
+                                Remove
+                            </button>
+                        </div>
+                        {/* Timer selector */}
+                        <div className="flex items-center space-x-2 text-sm">
+                            <span className="text-gray-600">Image expires after opening:</span>
+                            <select
+                                value={imageTimer}
+                                onChange={(e) => setImageTimer(Number(e.target.value))}
+                                className="border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value={0}>Never</option>
+                                <option value={15}>15 seconds</option>
+                                <option value={30}>30 seconds</option>
+                                <option value={60}>1 minute</option>
+                                <option value={120}>2 minutes</option>
+                                <option value={300}>5 minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                )}
+
+                <div className="p-2 flex items-center space-x-2">
+                    <button
+                        onClick={handleNewChat}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded text-lg min-w-[120px]"
+                    >
+                        Skip
+                        <div className="text-xs font-normal">Esc</div>
+                    </button>
+
+                    {/* Hidden file input */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageSelect}
+                        disabled={!isConnected}
+                        className="hidden"
+                        id="image-upload"
+                    />
+
+                    {/* Image upload button */}
+                    <label
+                        htmlFor="image-upload"
+                        className={`cursor-pointer bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded text-2xl ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="Upload image"
+                    >
+                        📎
+                    </label>
+
+                    <input
+                        type="text"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Type a message..."
+                        disabled={!isConnected}
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 text-black"
+                    />
+
+                    <button
+                        onClick={handleSendMessage}
+                        disabled={!isConnected || (!message.trim() && !selectedImage)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded disabled:bg-gray-300 disabled:cursor-not-allowed text-lg min-w-[120px]"
+                    >
+                        Send
+                        <div className="text-xs font-normal">Enter</div>
+                    </button>
+                </div>
+            </div>
+
+            {/* Image Modal/Lightbox */}
+            {viewingImage && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+                    onClick={() => setViewingImage(null)}
+                >
+                    <button
+                        onClick={() => setViewingImage(null)}
+                        className="absolute top-4 right-4 text-white text-4xl font-bold hover:text-gray-300 z-10"
+                        title="Close"
+                    >
+                        ×
+                    </button>
+                    <img
+                        src={viewingImage}
+                        alt="Full size"
+                        className="max-w-full max-h-full object-contain"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
+        </div>
+    )
+}
