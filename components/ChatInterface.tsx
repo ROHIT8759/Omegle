@@ -28,8 +28,44 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
     const [imageTimer, setImageTimer] = useState<number>(30) // Default 30 seconds
     const [currentTime, setCurrentTime] = useState(Date.now())
+    const [isBotMode, setIsBotMode] = useState(false)
+    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // Chatbot responses
+    const botResponses = [
+        "Hey! How's it going?",
+        "What brings you here today?",
+        "Nice to meet you! Where are you from?",
+        "I'm just chilling, browsing around. You?",
+        "Haha that's interesting!",
+        "Tell me more about that",
+        "Oh cool! What do you like to do for fun?",
+        "Same here! That's awesome",
+        "What kind of music do you listen to?",
+        "Yeah, I totally get that",
+        "Do you have any hobbies?",
+        "That sounds fun! I wish I could do that",
+        "lol yeah",
+        "So what are you studying/working on?",
+        "Nice! How long have you been doing that?",
+        "I feel you",
+        "That's really cool actually",
+        "Got any plans for the weekend?",
+        "What's your favorite movie or show?",
+        "I've heard good things about that!",
+        "Honestly same lol",
+        "What's the best thing that happened to you recently?",
+        "That's dope!",
+        "Are you into gaming at all?",
+        "What languages do you speak?",
+        "Where would you like to travel?",
+        "What's your favorite food?",
+        "I'm more of a night owl tbh",
+        "Do you prefer coffee or tea?",
+        "What's something you're really passionate about?"
+    ]
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -110,15 +146,79 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
             console.log('Searching for a stranger...')
             setIsSearching(true)
             setConnectionStatus('Looking for someone you can chat with...')
+            
+            // Activate bot after 10 seconds if no match found
+            const timeout = setTimeout(() => {
+                if (!isConnected) {
+                    console.log('No users found, activating bot mode')
+                    activateBotMode()
+                }
+            }, 10000) // 10 seconds
+            setSearchTimeout(timeout)
         })
 
         return () => {
             console.log('Closing socket connection')
+            if (searchTimeout) clearTimeout(searchTimeout)
             newSocket.close()
         }
-    }, [showRules])
+    }, [showRules, isConnected])
+
+    const activateBotMode = () => {
+        setIsBotMode(true)
+        setIsConnected(true)
+        setIsSearching(false)
+        setStrangerCountry('AI')
+        setConnectionStatus("You're now chatting with a stranger!")
+        setMessages([])
+        
+        // Send initial bot message
+        setTimeout(() => {
+            const greeting = botResponses[Math.floor(Math.random() * 3)] // First 3 are greetings
+            setMessages(prev => [...prev, {
+                text: greeting,
+                sender: 'stranger',
+                timestamp: Date.now()
+            }])
+        }, 1500)
+    }
+
+    const getBotResponse = (userMessage: string): string => {
+        const msg = userMessage.toLowerCase()
+        
+        // Contextual responses
+        if (msg.includes('hi') || msg.includes('hello') || msg.includes('hey')) {
+            return botResponses[Math.floor(Math.random() * 3)]
+        }
+        if (msg.includes('how are you') || msg.includes('how r u')) {
+            return "I'm doing great! Thanks for asking. How about you?"
+        }
+        if (msg.includes('age') || msg.includes('old')) {
+            return "I'm 22. You?"
+        }
+        if (msg.includes('from') || msg.includes('where')) {
+            return "I'm from the US. How about you?"
+        }
+        if (msg.includes('bye') || msg.includes('gtg') || msg.includes('gotta go')) {
+            return "Nice chatting with you! Take care!"
+        }
+        if (msg.includes('?')) {
+            // Questions get specific responses
+            const questionResponses = [
+                "Hmm, good question! I'd say " + botResponses[Math.floor(Math.random() * botResponses.length)].toLowerCase(),
+                "Let me think... " + botResponses[Math.floor(Math.random() * botResponses.length)],
+                botResponses[Math.floor(Math.random() * botResponses.length)]
+            ]
+            return questionResponses[Math.floor(Math.random() * questionResponses.length)]
+        }
+        
+        // Random response from pool
+        return botResponses[Math.floor(Math.random() * botResponses.length)]
+    }
 
     const handleNewChat = () => {
+        if (searchTimeout) clearTimeout(searchTimeout)
+        setIsBotMode(false)
         if (socket) {
             setMessages([])
             setIsConnected(false)
@@ -138,10 +238,10 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     }
 
     const handleSendMessage = () => {
-        if (socket && isConnected && (message.trim() || selectedImage)) {
+        if (isConnected && (message.trim() || selectedImage)) {
             const imageExpiry = selectedImage ? Date.now() + (imageTimer * 1000) : undefined
-            const messageData = selectedImage ? { text: message || '📷 Image', image: selectedImage, imageExpiry } : message
-            socket.emit('message', messageData)
+            
+            // Add user message
             setMessages(prev => [...prev, {
                 text: message || '📷 Image',
                 sender: 'you',
@@ -149,6 +249,38 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                 image: selectedImage || undefined,
                 imageExpiry
             }])
+            
+            // Send to socket if not bot mode
+            if (!isBotMode && socket) {
+                const messageData = selectedImage ? { text: message || '📷 Image', image: selectedImage, imageExpiry } : message
+                socket.emit('message', messageData)
+            }
+            
+            // Get bot response if in bot mode
+            if (isBotMode && message.trim()) {
+                const responseDelay = 1000 + Math.random() * 2000 // 1-3 seconds
+                setTimeout(() => {
+                    const botReply = getBotResponse(message)
+                    setMessages(prev => [...prev, {
+                        text: botReply,
+                        sender: 'stranger',
+                        timestamp: Date.now()
+                    }])
+                    
+                    // Random follow-up question 30% of the time
+                    if (Math.random() < 0.3) {
+                        setTimeout(() => {
+                            const followUp = botResponses[Math.floor(Math.random() * botResponses.length)]
+                            setMessages(prev => [...prev, {
+                                text: followUp,
+                                sender: 'stranger',
+                                timestamp: Date.now()
+                            }])
+                        }, 2000 + Math.random() * 3000)
+                    }
+                }, responseDelay)
+            }
+            
             setMessage('')
             setSelectedImage(null)
             if (fileInputRef.current) {
