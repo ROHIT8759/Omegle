@@ -9,6 +9,7 @@ interface Message {
     sender: 'stranger' | 'you'
     timestamp: number
     image?: string
+    imageExpiry?: number // Timestamp when image should expire
 }
 
 interface ChatInterfaceProps {
@@ -24,7 +25,11 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     const [connectionStatus, setConnectionStatus] = useState<string>('Click "Skip" to start chatting')
     const [message, setMessage] = useState('')
     const [showRules, setShowRules] = useState(true)
+    const [selectedImage, setSelectedImage] = useState<string | null>(null)
+    const [imageTimer, setImageTimer] = useState<number>(30) // Default 30 seconds
+    const [currentTime, setCurrentTime] = useState(Date.now())
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -33,6 +38,22 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     useEffect(() => {
         scrollToBottom()
     }, [messages])
+
+    // Timer to update current time and remove expired images
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentTime(Date.now())
+            // Remove expired images from messages
+            setMessages(prev => prev.map(msg => {
+                if (msg.image && msg.imageExpiry && Date.now() > msg.imageExpiry) {
+                    return { ...msg, image: undefined, imageExpiry: undefined }
+                }
+                return msg
+            }))
+        }, 1000) // Update every second
+
+        return () => clearInterval(interval)
+    }, [])
 
     useEffect(() => {
         if (showRules) return // Don't connect until rules are accepted
@@ -117,14 +138,37 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
     }
 
     const handleSendMessage = () => {
-        if (socket && isConnected && message.trim()) {
-            socket.emit('message', message)
+        if (socket && isConnected && (message.trim() || selectedImage)) {
+            const imageExpiry = selectedImage ? Date.now() + (imageTimer * 1000) : undefined
+            const messageData = selectedImage ? { text: message || '📷 Image', image: selectedImage, imageExpiry } : message
+            socket.emit('message', messageData)
             setMessages(prev => [...prev, {
-                text: message,
+                text: message || '📷 Image',
                 sender: 'you',
                 timestamp: Date.now(),
+                image: selectedImage || undefined,
+                imageExpiry
             }])
             setMessage('')
+            setSelectedImage(null)
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+        }
+    }
+
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                alert('Image size must be less than 5MB')
+                return
+            }
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setSelectedImage(reader.result as string)
+            }
+            reader.readAsDataURL(file)
         }
     }
 
@@ -196,45 +240,129 @@ export default function ChatInterface({ onBackToHome }: ChatInterfaceProps) {
                     </div>
                 )}
 
-                {messages.map((msg, index) => (
-                    <div key={index} className="mb-2">
-                        <span className="font-bold text-sm" style={{ color: msg.sender === 'you' ? '#0000FF' : '#FF0000' }}>
-                            {msg.sender === 'you' ? 'You' : 'Stranger'}:
-                        </span>
-                        <span className="ml-2 text-sm text-black">{msg.text}</span>
-                    </div>
-                ))}
+                {messages.map((msg, index) => {
+                    const timeRemaining = msg.imageExpiry ? Math.max(0, Math.floor((msg.imageExpiry - currentTime) / 1000)) : null
+
+                    return (
+                        <div key={index} className="mb-2">
+                            <span className="font-bold text-sm" style={{ color: msg.sender === 'you' ? '#0000FF' : '#FF0000' }}>
+                                {msg.sender === 'you' ? 'You' : 'Stranger'}:
+                            </span>
+                            {msg.image && (
+                                <div className="ml-2 mt-1 inline-block relative">
+                                    <img
+                                        src={msg.image}
+                                        alt="Shared image"
+                                        className="max-w-xs h-auto rounded cursor-pointer hover:opacity-90 border border-gray-300"
+                                        onClick={() => window.open(msg.image, '_blank')}
+                                    />
+                                    {timeRemaining !== null && timeRemaining > 0 && (
+                                        <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs font-bold">
+                                            ⏱️ {timeRemaining}s
+                                        </div>
+                                    )}
+                                    {timeRemaining === 0 && (
+                                        <div className="absolute inset-0 bg-gray-200 bg-opacity-90 flex items-center justify-center rounded">
+                                            <span className="text-gray-600 text-sm font-semibold">🔒 Image expired</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {msg.text && msg.text !== '📷 Image' && (
+                                <span className="ml-2 text-sm text-black">{msg.text}</span>
+                            )}
+                        </div>
+                    )
+                })}
                 <div ref={messagesEndRef} />
             </div>
 
             {/* Control Panel */}
-            <div className="border-t border-gray-300 bg-white p-2 flex items-center space-x-2">
-                <button
-                    onClick={handleNewChat}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded text-lg min-w-[120px]"
-                >
-                    Skip
-                    <div className="text-xs font-normal">Esc</div>
-                </button>
+            <div className="border-t border-gray-300 bg-white">
+                {/* Image Preview */}
+                {selectedImage && (
+                    <div className="p-3 bg-gray-50 border-b border-gray-300">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center space-x-3">
+                                <img src={selectedImage} alt="Preview" className="h-16 w-16 object-cover rounded border border-gray-300" />
+                                <span className="text-sm text-gray-600">Image ready to send</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setSelectedImage(null)
+                                    if (fileInputRef.current) fileInputRef.current.value = ''
+                                }}
+                                className="text-red-500 hover:text-red-700 font-semibold text-sm"
+                            >
+                                Remove
+                            </button>
+                        </div>
+                        {/* Timer selector */}
+                        <div className="flex items-center space-x-2 text-sm">
+                            <span className="text-gray-600">Image expires in:</span>
+                            <select
+                                value={imageTimer}
+                                onChange={(e) => setImageTimer(Number(e.target.value))}
+                                className="border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value={15}>15 seconds</option>
+                                <option value={30}>30 seconds</option>
+                                <option value={60}>1 minute</option>
+                                <option value={120}>2 minutes</option>
+                                <option value={300}>5 minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                )}
 
-                <input
-                    type="text"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Type a message..."
-                    disabled={!isConnected}
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 text-black"
-                />
+                <div className="p-2 flex items-center space-x-2">
+                    <button
+                        onClick={handleNewChat}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded text-lg min-w-[120px]"
+                    >
+                        Skip
+                        <div className="text-xs font-normal">Esc</div>
+                    </button>
 
-                <button
-                    onClick={handleSendMessage}
-                    disabled={!isConnected || !message.trim()}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded disabled:bg-gray-300 disabled:cursor-not-allowed text-lg min-w-[120px]"
-                >
-                    Send
-                    <div className="text-xs font-normal">Enter</div>
-                </button>
+                    {/* Hidden file input */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageSelect}
+                        disabled={!isConnected}
+                        className="hidden"
+                        id="image-upload"
+                    />
+
+                    {/* Image upload button */}
+                    <label
+                        htmlFor="image-upload"
+                        className={`cursor-pointer bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded text-2xl ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="Upload image"
+                    >
+                        📎
+                    </label>
+
+                    <input
+                        type="text"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Type a message..."
+                        disabled={!isConnected}
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 text-black"
+                    />
+
+                    <button
+                        onClick={handleSendMessage}
+                        disabled={!isConnected || (!message.trim() && !selectedImage)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded disabled:bg-gray-300 disabled:cursor-not-allowed text-lg min-w-[120px]"
+                    >
+                        Send
+                        <div className="text-xs font-normal">Enter</div>
+                    </button>
+                </div>
             </div>
         </div>
     )
